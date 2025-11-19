@@ -1,32 +1,40 @@
 FROM ubuntu:24.04
 
-ENTRYPOINT ["usr/sbin/apache2ctl", "-D", "FOREGROUND"]
+# Mise à jour du système et installation des dépendances
+RUN apt update && \
+    apt dist-upgrade -y && \
+    apt install -q -y \
+        wget \
+        unzip \
+        apache2 \
+        php \
+        libapache2-mod-php \
+        php-mongodb \
+        php-zip \
+        php-redis \
+        php-curl && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN apt update && apt dist-upgrade -y
-
+# Configuration de debconf pour éviter les prompts interactifs
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
-COPY ./app.conf /tmp/app.conf
+# Installation de Composer
+RUN wget -O /usr/local/bin/composer https://getcomposer.org/download/latest-stable/composer.phar && \
+    chmod +x /usr/local/bin/composer
 
-RUN apt install -q -y wget unzip
+# Configuration d'Apache
+COPY ./app.conf /etc/apache2/sites-available/app.conf
+RUN a2enmod rewrite headers && \
+    a2dissite 000-default.conf && \
+    rm -rf /var/www/html && \
+    a2ensite app.conf
 
-# apache
-RUN apt install apache2 -q -y
-RUN a2enmod rewrite
-RUN a2enmod headers
-
-RUN cp /tmp/app.conf /etc/apache2/sites-available/app.conf
-RUN a2dissite 000-default.conf
-RUN rm -rf /var/www/html
-RUN a2ensite app.conf
-
-# php
-RUN apt install -q -y php libapache2-mod-php php-mongodb php-zip php-redis
-
-# composer
-RUN wget https://getcomposer.org/download/latest-stable/composer.phar
-RUN mv composer.phar /usr/local/bin/composer
-RUN chmod +x /usr/local/bin/composer
+# Création du répertoire de travail
+RUN mkdir -p /var/www/app && \
+    chown -R www-data:www-data /var/www/app
 
 WORKDIR /var/www/app
 
+# Point d'entrée
+ENTRYPOINT ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
